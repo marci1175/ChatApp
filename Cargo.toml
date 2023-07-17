@@ -1,7 +1,6 @@
-
 [package]
 name = "szeChat"
-version = "0.5.3"
+version = "1.0.0"
 authors = ["marci1175, remy_clarke, sayuriu"]
 edition = "2021"
 rust-version = "1.65"
@@ -21,6 +20,7 @@ serde = { version = "1", features = ["derive"] }
 rfd = "0.11.4"
 sync = "0.1.0"
 thread = "0.1.0"
+chrono = "0.4.26"
 
 
 # native:

@@ -1,0 +1,6 @@
+{
+    "rust-analyzer.linkedProjects": [
+        ".\\.netserver\\Cargo.toml",
+        ".\\Cargo.toml"
+    ]
+}

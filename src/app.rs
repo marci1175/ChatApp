@@ -1,5 +1,6 @@
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 use egui::{Color32, Align};
+
 use egui::color_picker::Alpha;
 mod webcom;
 use webcom::TcpClient;
@@ -53,7 +54,7 @@ impl Default for TemplateApp {
             msg_font_size: 18.0,
             msg_color: Color32::from_rgb(255, 255, 255),
             settings_is_open : false,
-            connection_is_open : false,
+            connection_is_open : true,
             messages: Vec::new(),
             username: String::new(),
             ip: String::from("127.0.0.1:6000"),
@@ -151,6 +152,7 @@ impl eframe::App for TemplateApp {
                                     self.status_color = Color32::from_rgb(255, 0, 0);
                                     ctx.request_repaint();
                                 },
+
                             };
                             
                         }
@@ -188,21 +190,23 @@ impl eframe::App for TemplateApp {
                 if ui.button("Settings").clicked(){
                     self.settings_is_open = true;
                 }
-                });    
+                });   
             
 
 
         });
         egui::CentralPanel::default().show(ctx, |ui| {
+            ui.allocate_ui(egui::vec2(ui.available_width(), ui.available_height() - 180.0), |ui|{
                 egui::ScrollArea::vertical().id_source("msg_sarea").show(ui, |ui| {
                 //add messages here
                     for i in self.messages.iter() {
                         ui.label(egui::RichText::new(i).color(self.msg_color).size(self.msg_font_size));
+                        ui.separator();
                     }
                     ctx.request_repaint();
 
                 });
-                
+            });
         });
         
         egui::TopBottomPanel::bottom("texts").show(ctx, |ui| {

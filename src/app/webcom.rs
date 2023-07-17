@@ -1,8 +1,8 @@
-
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::sync::mpsc::{self, TryRecvError};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use chrono::Utc;
 const MSG_SIZE: usize = 4096;
 pub struct TcpClient {
     pub client: TcpStream,
@@ -24,7 +24,9 @@ impl TcpClient {
     pub fn send_message(&mut self, message: String, author: String) -> io::Result<()> {
         if self.is_connected == true && !(message.trim().is_empty()) {
             let (tx, rx) = mpsc::channel::<String>();
-            let msg = format!("{} : {}", author, message.trim().to_string() );
+            let current_datetime = Utc::now();
+            let datetime_str = current_datetime.format(" %Y-%m-%d %H:%M:%S ").to_string();
+            let msg = format!("{}   -   {} : {}", datetime_str, author, message.trim().to_string() );
             tx.send(msg).expect("Failed to send msg");
 
             match rx.try_recv() {
@@ -35,7 +37,7 @@ impl TcpClient {
                     self.client.write_all(&buff).expect("writing to socket failed");
                 }, 
                 Err(TryRecvError::Empty) => (),
-                Err(TryRecvError::Disconnected) => ()
+                Err(TryRecvError::Disconnected) => (),
             }
         }
         else {
@@ -69,6 +71,7 @@ impl TcpClient {
                 
             }
         }
+        
         return message_string;
     }
 
