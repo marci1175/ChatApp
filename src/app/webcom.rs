@@ -21,13 +21,12 @@ impl TcpClient {
         Ok(Self { client, shutdown_requested, is_connected})
     }
 
-    pub fn send_message(&mut self, message: String) -> io::Result<()> {
-        if self.is_connected == true && !(message.trim().len() == 0) {
+    pub fn send_message(&mut self, message: String, author: String) -> io::Result<()> {
+        if self.is_connected == true && !(message.trim().is_empty()) {
             let (tx, rx) = mpsc::channel::<String>();
-            let msg = message.trim().to_string();
+            let msg = format!("{} : {}", author, message.trim().to_string() );
             tx.send(msg).expect("Failed to send msg");
 
-            
             match rx.try_recv() {
                 Ok(msg) => {
                     let mut buff = msg.clone().to_owned().into_bytes();
@@ -75,14 +74,4 @@ impl TcpClient {
 
         // Return a clone of the current state of the struct
     }
-    
 
-impl Default for TcpClient {
-    fn default() -> Self {
-        Self {
-            client: TcpStream::connect("192.168.0.1:80".to_owned()).expect("Couldnt connect to ip"),
-            shutdown_requested: AtomicBool::default().into(),
-            is_connected: false,
-        }
-    }
-}

@@ -8,8 +8,6 @@ use webcom::TcpClient;
 pub struct TemplateApp {
     // Example stuff:
     #[serde(skip)]
-    tcpclient: TcpClient,
-    #[serde(skip)]
     label: String,
     #[serde(skip)]
     tcpc: Option<TcpClient>,
@@ -21,7 +19,9 @@ pub struct TemplateApp {
     color: Color32,
     #[serde(skip)]
     status: String,
+    #[serde(skip)]
     status_color: Color32,
+
     msg_font_size : f32,
     msg_color: Color32,
     //settings menu
@@ -43,7 +43,6 @@ impl Default for TemplateApp {
     fn default() -> Self {
         Self {
             // Example stuff:
-            tcpclient: TcpClient::default(),
             label: "".to_owned(),
             tcpc: None,
             value: 2.7,
@@ -86,8 +85,8 @@ impl eframe::App for TemplateApp {
 
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.tcpc.is_some(){
-            let incoming_msg : String = TcpClient::listen_for_msg(&mut self.tcpclient);
+        if let Some(tcpc) = &mut self.tcpc{
+            let incoming_msg : String = TcpClient::listen_for_msg(tcpc);
             if incoming_msg.trim().len() > 0{
                 self.messages.push(incoming_msg);
                 ctx.request_repaint();
@@ -130,26 +129,26 @@ impl eframe::App for TemplateApp {
                             self.status = "Connection already established".to_owned();
                             ctx.request_repaint();
                         }
-                        else if self.username.len() == 0{
+                        else if self.username.trim().is_empty(){
                             self.status = "You didnt enter a username!".to_owned();
+                            self.status_color = Color32::from_rgb(255, 0, 0);
                             ctx.request_repaint();
                         }
                         else {
                             self.status = "Connecting. . .".to_owned();
+                            self.status_color = Color32::from_rgb(127, 250, 133);
                             ctx.request_repaint();
                             match TcpClient::new(&self.ip) {
                                 Ok(tcpc) => {
-                                    //manually setting values
-                                    self.tcpclient = TcpClient::new(&self.ip).expect("This is impossible");
-                                    self.tcpclient.is_connected = true;
-
                                     self.tcpc = Some(tcpc);
                                     self.status = "Connected".to_owned();
-
+                                    self.status_color = Color32::from_rgb(0, 255, 0);
+                                    self.messages.clear();
                                     ctx.request_repaint();
                                 },
                                 Err(_) => {
                                     self.status = "Invalid ip adress or port".to_owned();
+                                    self.status_color = Color32::from_rgb(255, 0, 0);
                                     ctx.request_repaint();
                                 },
                             };
@@ -161,11 +160,12 @@ impl eframe::App for TemplateApp {
                         //dsiconnect
                         if let Some(tcpc) = &self.tcpc {
                             self.status = "Disconecting. . .".to_owned();
+                            self.status_color = Color32::from_rgb(245, 66, 93);
                             ctx.request_repaint();
-                            TcpClient::shutdown(&tcpc).expect("Couldnt shutdown");
+                            TcpClient::shutdown(tcpc).expect("Couldnt shutdown");
                             self.tcpc = None;
-                            self.tcpclient.is_connected = false;
                             self.status = "Disconected".to_owned();
+                            self.status_color = Color32::from_rgb(255, 0, 0);
                             ctx.request_repaint();
                         }
                         else{
@@ -197,7 +197,7 @@ impl eframe::App for TemplateApp {
                 egui::ScrollArea::vertical().id_source("msg_sarea").show(ui, |ui| {
                 //add messages here
                     for i in self.messages.iter() {
-                        ui.label(i);
+                        ui.label(egui::RichText::new(i).color(self.msg_color).size(self.msg_font_size));
                     }
                     ctx.request_repaint();
 
@@ -210,8 +210,9 @@ impl eframe::App for TemplateApp {
             ui.with_layout(egui::Layout::left_to_right(Align::Min), |ui|{
                 if ui.button("Send message").clicked(){
                     //format the text which is to be sent
-                    let to_be_sent = format!("{} : {}", self.username, self.label);
-                    self.tcpclient.send_message(to_be_sent).expect("Couldnt send msg");
+                    if let Some(tcpc) = &mut self.tcpc{
+                        tcpc.send_message(self.label.clone(), self.username.clone()).expect("Couldnt send msg");
+                    }
                     //TcpClient::sendmessage(&mut self.tcpclient ,self.label.clone()).expect("Couldnt send message");
                     self.label.clear();
                 };

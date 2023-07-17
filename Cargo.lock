@@ -2103,6 +2103,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "szeChat"
+version = "0.5.3"
+dependencies = [
+ "console_error_panic_hook",
+ "eframe",
+ "egui",
+ "rfd",
+ "serde",
+ "sync",
+ "thread",
+ "tracing-subscriber",
+ "tracing-wasm",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "target-lexicon"
 version = "0.12.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2851,22 +2867,6 @@ name = "xml-rs"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"
-
-[[package]]
-name = "your_crate"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "eframe",
- "egui",
- "rfd",
- "serde",
- "sync",
- "thread",
- "tracing-subscriber",
- "tracing-wasm",
- "wasm-bindgen-futures",
-]
 
 [[package]]
 name = "zbus"
