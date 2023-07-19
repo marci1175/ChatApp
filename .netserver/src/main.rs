@@ -15,6 +15,7 @@ fn main() {
     server.set_nonblocking(true).expect("failed to initialize non-blocking");
 
     let mut clients = vec![];
+    
     let (tx, rx) = mpsc::channel::<String>();
     loop {
         if let Ok((mut socket, addr)) = server.accept() {
@@ -22,7 +23,8 @@ fn main() {
 
             let tx = tx.clone();
             clients.push(socket.try_clone().expect("failed to clone client"));
-
+            let msg = format!("{}, has connected", addr);
+            tx.send(msg.to_string()).expect("msg");
             thread::spawn(move || loop {
                 let mut buff = vec![0; MSG_SIZE];
 
@@ -37,7 +39,10 @@ fn main() {
                     Err(ref err) if err.kind() == ErrorKind::WouldBlock => (),
                     Err(_) => {
                         println!("closing connection with: {}", addr);
+                        let msg = format!("{}, has disconnected", addr);
+                        tx.send(msg.to_string()).expect("msg");
                         break;
+                        
                     }
                 }
 

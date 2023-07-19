@@ -1,14 +1,36 @@
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 use egui::{Color32, Align};
-
+//use for win bindings
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_RETURN, VK_SHIFT, VK_CONTROL};
+//use for scroll wheel interaction cuz shit crates
 use egui::color_picker::Alpha;
 mod webcom;
 use webcom::TcpClient;
+mod etc;
+use etc::emojiui;
+use rand::{Rng, rngs::ThreadRng};
+use winapi::shared::windef::HWND;
+use winapi::um::winuser::{
+    MSG, PM_REMOVE, WM_MOUSEWHEEL,PeekMessageW, TranslateMessage, DispatchMessageW, GET_WHEEL_DELTA_WPARAM,
+};
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
+
 pub struct TemplateApp {
-    // Example stuff:
+    //generate random
     #[serde(skip)]
+    ml_is_enabled: bool,
+    #[serde(skip)]
+    emojiui_is_open: bool,
+    #[serde(skip)]
+    random_generated: bool,
+    #[serde(skip)]
+    randomeng: ThreadRng,
+    //used for interactive emoji button
+    random_emoji: String,
+    emoji: Vec<String>,
+    #[serde(skip)]
+    //inputted text
     label: String,
     #[serde(skip)]
     tcpc: Option<TcpClient>,
@@ -43,7 +65,12 @@ pub struct TemplateApp {
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            // Example stuff:
+            ml_is_enabled: false,
+            emojiui_is_open: false,
+            random_generated: false,
+            randomeng: rand::thread_rng(),
+            emoji: vec!["😐","😍","😉","😈","😇","😆","😅","😄","😃","😂","😁","😀","✡"].into_iter().map(str::to_owned).collect::<Vec<_>>(),
+            random_emoji: "😐".to_owned(),
             label: "".to_owned(),
             tcpc: None,
             value: 2.7,
@@ -95,9 +122,47 @@ impl eframe::App for TemplateApp {
             //ctx.request_repaint();
             
         }
+        let mut scroll_delta: i16 = 0;
+        //wheeldelta
+        unsafe {
+            let hwnd: HWND = std::ptr::null_mut();
+    
+            let mut msg: MSG = std::mem::zeroed();
+            while PeekMessageW(&mut msg, hwnd, 0, 0, PM_REMOVE) != 0 {
+                if msg.message == WM_MOUSEWHEEL {
+                   scroll_delta = GET_WHEEL_DELTA_WPARAM(msg.wParam) / 120;
+                }
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        
+        let ctrlimput = unsafe {
+            GetAsyncKeyState(VK_CONTROL as i32)
+        };
+        let ctrlis_pressed = (ctrlimput as u16 & 0x8000) != 0;
+        //listen if ENTER key is pressed so we can send the message, except when r or l shift is pressed
+        let enterinp = unsafe{
+            GetAsyncKeyState(VK_RETURN as i32)
+        };
+        let shiftinp = unsafe{
+            GetAsyncKeyState(VK_SHIFT as i32)
+        };
+        
+        let sis_pressed = (shiftinp as u16 & 0x8000) != 0;
+        let eis_pressed = (enterinp as u16 & 0x8000) != 0;
+        
+        if eis_pressed && !sis_pressed {
+            if let Some(tcpc) = &mut self.tcpc{
+                tcpc.send_message(self.label.clone(), self.username.clone()).expect("Couldnt send msg");
+            }
+            self.label.clear();
+        }
+        
         if self.settings_is_open {
             egui::Window::new("Settings")
                 .open(&mut self.settings_is_open)
+                .resizable(false)
                 .show(ctx, |ui| {
                     egui::Grid::new("settings_grid").num_columns(2).show(ui, |ui| {
                         ui.label("Text editor");
@@ -119,6 +184,9 @@ impl eframe::App for TemplateApp {
         if self.connection_is_open{
             egui::Window::new("Connection")
                 .open(&mut self.connection_is_open)
+                .auto_sized()
+                .resizable(false)
+                .collapsible(false)
                 .show(ctx, |ui| {
                     ui.label("Enter a username");
                     ui.text_edit_singleline(&mut self.username);
@@ -142,6 +210,7 @@ impl eframe::App for TemplateApp {
                             match TcpClient::new(&self.ip) {
                                 Ok(tcpc) => {
                                     self.tcpc = Some(tcpc);
+                                    self.ml_is_enabled = true;
                                     self.status = "Connected".to_owned();
                                     self.status_color = Color32::from_rgb(0, 255, 0);
                                     self.messages.clear();
@@ -166,6 +235,7 @@ impl eframe::App for TemplateApp {
                             ctx.request_repaint();
                             TcpClient::shutdown(tcpc).expect("Couldnt shutdown");
                             self.tcpc = None;
+                            self.ml_is_enabled = false;
                             self.status = "Disconected".to_owned();
                             self.status_color = Color32::from_rgb(255, 0, 0);
                             ctx.request_repaint();
@@ -182,7 +252,7 @@ impl eframe::App for TemplateApp {
 
         #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.with_layout(egui::Layout::left_to_right(Align::Min), |ui|{
+            ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui|{
                 if ui.button("Connect").clicked(){
                     self.connection_is_open = true;
                 }
@@ -190,6 +260,10 @@ impl eframe::App for TemplateApp {
                 if ui.button("Settings").clicked(){
                     self.settings_is_open = true;
                 }
+                if !self.ml_is_enabled {
+                    ui.label(egui::RichText::from("Connect to a chat server to write messages!").color(egui::Color32::from_rgb(255, 0, 0)));
+                }
+                
                 });   
             
 
@@ -197,10 +271,18 @@ impl eframe::App for TemplateApp {
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.allocate_ui(egui::vec2(ui.available_width(), ui.available_height() - 180.0), |ui|{
-                egui::ScrollArea::vertical().id_source("msg_sarea").show(ui, |ui| {
+                egui::ScrollArea::vertical().id_source("msg_sarea").stick_to_bottom(true).show(ui, |ui| {
                 //add messages here
                     for i in self.messages.iter() {
-                        ui.label(egui::RichText::new(i).color(self.msg_color).size(self.msg_font_size));
+                        let msglabel = ui.label(egui::RichText::new(i).color(self.msg_color).size(self.msg_font_size));
+                        if msglabel.hovered() && ctrlis_pressed{
+                            if scroll_delta < 0 {
+                                self.msg_font_size -= 5.0;
+                            }
+                            if scroll_delta > 0 {
+                                self.msg_font_size += 5.0;
+                            }
+                        }
                         ui.separator();
                     }
                     ctx.request_repaint();
@@ -208,33 +290,61 @@ impl eframe::App for TemplateApp {
                 });
             });
         });
-        
-        egui::TopBottomPanel::bottom("texts").show(ctx, |ui| {
-            ui.add_space(12.0);
-            ui.with_layout(egui::Layout::left_to_right(Align::Min), |ui|{
-                if ui.button("Send message").clicked(){
-                    //format the text which is to be sent
-                    if let Some(tcpc) = &mut self.tcpc{
-                        tcpc.send_message(self.label.clone(), self.username.clone()).expect("Couldnt send msg");
-                    }
-                    //TcpClient::sendmessage(&mut self.tcpclient ,self.label.clone()).expect("Couldnt send message");
-                    self.label.clear();
-                };
-            });
-            ui.add_space(12.0);
+        egui::TopBottomPanel::bottom("texteditor").show(ctx, |ui| {
+            ui.add_space(5.0);
             ui.allocate_ui(egui::vec2(ui.available_width(), 125.0), |ui|{
-                egui::ScrollArea::vertical().id_source("text_sarea").show(ui, |ui| {
+                egui::ScrollArea::vertical().id_source("text_sarea").stick_to_bottom(true).show(ui, |ui| {
                 ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
                     ui.add_sized(ui.available_size(), egui::TextEdit::multiline(&mut self.label)
                         .text_color(self.color)
+                        .interactive(self.ml_is_enabled)
                         .font(egui::FontId::proportional(self.font_size)));
-                });
-        
-            }); 
+                    });
+                }); 
             ui.add_space(5.0);
-            
-        });    
-    });
+            });    
+        });
+        egui::TopBottomPanel::bottom("textmenu").show(ctx, |ui| {
+            if self.emojiui_is_open{
+                let emoji = emojiui(ui, ctx, _frame);
+                self.label += &emoji;
+            }
+            ui.allocate_ui(egui::vec2(ui.available_width(), 40.0), |ui|{
+                ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui|{
+                    if ui.button("Send message").clicked(){
+                        //format the text which is to be sent
+                        if let Some(tcpc) = &mut self.tcpc{
+                            tcpc.send_message(self.label.clone(), self.username.clone()).expect("Couldnt send msg");
+                        }
+                        self.label.clear();
+                    };
+                    //emoji icon, button logic
+                    let uibutt = ui.button(egui::RichText::from(&self.random_emoji).size(20.0));
+                    if uibutt.hovered(){
+                        if !self.random_generated {
+                            let random_number = self.randomeng.gen_range(0..=self.emoji.len() - 1);
+                            self.random_emoji = self.emoji[random_number].clone();
+                            self.random_generated = true;
+                        }
+                    }
+                    else {
+                        //check if button has been unhovered, reset variable
+                        self.random_generated = false;
+                    }
+                    if uibutt.clicked(){
+                        if self.emojiui_is_open {
+                            self.emojiui_is_open = false;
+                        }
+                        else {
+                            self.emojiui_is_open = true;
+                        }
+                        
+                    }
+    
+                });
+            });
+        });
+        
         
         
         if false {
