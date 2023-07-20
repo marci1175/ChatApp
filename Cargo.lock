@@ -2172,9 +2172,10 @@ dependencies = [
  "tracing-wasm",
  "user32-sys",
  "wasm-bindgen-futures",
+ "win32_notification",
  "winapi 0.3.9",
  "windows 0.48.0",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -2706,6 +2707,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d743fdedc5c64377b5fc2bc036b01c7fd642205a0d96356034ae3404d49eb7fb"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "win32_notification"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "364cdb51ad77d274630365572788fd9653312eb271cf11735b995f4d672271ee"
+dependencies = [
+ "winapi 0.3.9",
 ]
 
 [[package]]

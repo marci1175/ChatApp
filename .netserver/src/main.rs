@@ -23,7 +23,8 @@ fn main() {
 
             let tx = tx.clone();
             clients.push(socket.try_clone().expect("failed to clone client"));
-            let msg = format!("{}, has connected", addr);
+            let client_amount = clients.len();
+            let msg = format!("{}, has connected\n{}", addr, client_amount);
             tx.send(msg.to_string()).expect("msg");
             thread::spawn(move || loop {
                 let mut buff = vec![0; MSG_SIZE];
@@ -33,13 +34,14 @@ fn main() {
                         let msg = buff.into_iter().take_while(|&x| x != 0).collect::<Vec<_>>();
                         let msg = String::from_utf8(msg).expect("Invalid utf8 message");
 
-                        println!("{}: {:?}", addr, msg);
+                        println!("{}: {:?}\n{}", addr, msg, client_amount);
+                        let msg = format!("{} \n{}",msg, client_amount);
                         tx.send(msg).expect("failed to send msg to rx");
                     }, 
                     Err(ref err) if err.kind() == ErrorKind::WouldBlock => (),
                     Err(_) => {
                         println!("closing connection with: {}", addr);
-                        let msg = format!("{}, has disconnected", addr);
+                        let msg = format!("{}, has disconnected\n{}", addr, client_amount - 1);
                         tx.send(msg.to_string()).expect("msg");
                         break;
                         
@@ -51,7 +53,7 @@ fn main() {
         }
 
         if let Ok(msg) = rx.try_recv() {
-            clients = clients.into_iter().filter_map(|mut client| {
+            clients = clients.into_iter().filter_map(|mut client: std::net::TcpStream| {
                 let mut buff = msg.clone().into_bytes();
                 buff.resize(MSG_SIZE, 0);
 

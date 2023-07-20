@@ -1,5 +1,6 @@
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 use egui::{Color32, Align};
+
 //use for win bindings
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_RETURN, VK_SHIFT, VK_CONTROL};
 //use for scroll wheel interaction cuz shit crates
@@ -9,15 +10,20 @@ use webcom::TcpClient;
 mod etc;
 use etc::emojiui;
 use rand::{Rng, rngs::ThreadRng};
-use winapi::shared::windef::HWND;
-use winapi::um::winuser::{
-    MSG, PM_REMOVE, WM_MOUSEWHEEL,PeekMessageW, TranslateMessage, DispatchMessageW, GET_WHEEL_DELTA_WPARAM,
-};
+use std::thread;
+use std::time::Duration;
+use win32_notification::NotificationBuilder;
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 
 pub struct TemplateApp {
     //generate random
+    #[serde(skip)]
+    msg_len_already_backed: bool,
+    #[serde(skip)]
+    has_focus: bool,
+    #[serde(skip)]
+    back_up_messages_num: usize,
     #[serde(skip)]
     ml_is_enabled: bool,
     #[serde(skip)]
@@ -36,7 +42,8 @@ pub struct TemplateApp {
     tcpc: Option<TcpClient>,
     // this how you opt-out of serialization of a member
     #[serde(skip)]
-    value: f32,
+    //currently connected users
+    user_counter: String,
     //settings
     font_size : f32,
     color: Color32,
@@ -65,7 +72,10 @@ pub struct TemplateApp {
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
+            has_focus: false,
+            back_up_messages_num: 0,
             ml_is_enabled: false,
+            msg_len_already_backed: false,
             emojiui_is_open: false,
             random_generated: false,
             randomeng: rand::thread_rng(),
@@ -73,7 +83,7 @@ impl Default for TemplateApp {
             random_emoji: "😐".to_owned(),
             label: "".to_owned(),
             tcpc: None,
-            value: 2.7,
+            user_counter: "0".to_string(),
             font_size: 18.0,
             color: Color32::from_rgb(255, 255, 255),
             status: String::from("Waiting for user"),
@@ -113,29 +123,53 @@ impl eframe::App for TemplateApp {
 
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        //check if focused
+        self.has_focus = ctx.input(|i| i.focused);
+        //check the messages.len() when the app lost focus
+        if !self.has_focus && !self.msg_len_already_backed{
+            self.back_up_messages_num = self.messages.len();
+            self.msg_len_already_backed = true;
+        }
+        if self.has_focus{
+            self.msg_len_already_backed = false;
+        }
+        //is backed up num is small than messages.len with 5 play notif and add 5 to backup
+        if  (self.back_up_messages_num + 5) < self.messages.len(){
+            //reset thread_is_running value
+            self.back_up_messages_num += 5;
+                std::thread::spawn(||{
+                    let notification = NotificationBuilder::new()
+                        .title_text("SzéChat")
+                        .info_text("Unread messages")
+                        .build()
+                        .expect("Could not create notification");
+    
+                        notification.show().expect("Failed to show notification");
+                    thread::sleep(Duration::from_secs(5));
+                    notification
+                        .delete()
+                        .expect("Failed to delete notification");
+                });
+        }
         if let Some(tcpc) = &mut self.tcpc{
             let incoming_msg : String = TcpClient::listen_for_msg(tcpc);
             if incoming_msg.trim().len() > 0{
-                self.messages.push(incoming_msg);
+                let raw_msg: Vec<String> = incoming_msg.split('\n').map(|s| s.to_string()).collect();
+                self.messages.push(raw_msg[0].clone());
+                if raw_msg.len() > 1 {
+                    self.user_counter = raw_msg[1].clone();
+                }
+                else {
+                    self.user_counter = "Use the latest server else the user counter wont work!".to_owned();
+                }
                 ctx.request_repaint();
             }
             //ctx.request_repaint();
             
         }
-        let mut scroll_delta: i16 = 0;
-        //wheeldelta
-        unsafe {
-            let hwnd: HWND = std::ptr::null_mut();
-    
-            let mut msg: MSG = std::mem::zeroed();
-            while PeekMessageW(&mut msg, hwnd, 0, 0, PM_REMOVE) != 0 {
-                if msg.message == WM_MOUSEWHEEL {
-                   scroll_delta = GET_WHEEL_DELTA_WPARAM(msg.wParam) / 120;
-                }
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-        }
+        //scroll delta = zoom delta because im pressing ctrl it counts az zoom
+        let scroll_delta: f32 = ctx.input(|state: &egui::InputState| state.zoom_delta());
+        
         
         let ctrlimput = unsafe {
             GetAsyncKeyState(VK_CONTROL as i32)
@@ -253,6 +287,7 @@ impl eframe::App for TemplateApp {
         #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui|{
+               
                 if ui.button("Connect").clicked(){
                     self.connection_is_open = true;
                 }
@@ -262,6 +297,10 @@ impl eframe::App for TemplateApp {
                 }
                 if !self.ml_is_enabled {
                     ui.label(egui::RichText::from("Connect to a chat server to write messages!").color(egui::Color32::from_rgb(255, 0, 0)));
+                }
+                else {
+                    let connected_users = format!("Connected users: {}", self.user_counter);
+                    ui.label(connected_users);
                 }
                 
                 });   
@@ -276,10 +315,10 @@ impl eframe::App for TemplateApp {
                     for i in self.messages.iter() {
                         let msglabel = ui.label(egui::RichText::new(i).color(self.msg_color).size(self.msg_font_size));
                         if msglabel.hovered() && ctrlis_pressed{
-                            if scroll_delta < 0 {
+                            if scroll_delta < 1.0 {
                                 self.msg_font_size -= 5.0;
                             }
-                            if scroll_delta > 0 {
+                            if scroll_delta > 1.0 {
                                 self.msg_font_size += 5.0;
                             }
                         }
@@ -306,7 +345,7 @@ impl eframe::App for TemplateApp {
         });
         egui::TopBottomPanel::bottom("textmenu").show(ctx, |ui| {
             if self.emojiui_is_open{
-                let emoji = emojiui(ui, ctx, _frame);
+                let emoji = emojiui(ctx, _frame);
                 self.label += &emoji;
             }
             ui.allocate_ui(egui::vec2(ui.available_width(), 40.0), |ui|{
