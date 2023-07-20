@@ -34,7 +34,10 @@ impl TcpClient {
                     let mut buff = msg.clone().to_owned().into_bytes();
                     buff.resize(4096, 0);
                     
-                    self.client.write_all(&buff).expect("writing to socket failed");
+                    match self.client.write_all(&buff){
+                        Ok(ok) => {ok},
+                        Err(err) => {return Err(err);}
+                    };
                 }, 
                 Err(TryRecvError::Empty) => (),
                 Err(TryRecvError::Disconnected) => (),

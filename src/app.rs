@@ -134,7 +134,7 @@ impl eframe::App for TemplateApp {
             self.msg_len_already_backed = false;
         }
         //is backed up num is small than messages.len with 5 play notif and add 5 to backup
-        if  (self.back_up_messages_num + 5) < self.messages.len(){
+        if  (self.back_up_messages_num + 4) < self.messages.len() && !self.has_focus{
             //reset thread_is_running value
             self.back_up_messages_num += 5;
                 std::thread::spawn(||{
@@ -353,7 +353,17 @@ impl eframe::App for TemplateApp {
                     if ui.button("Send message").clicked(){
                         //format the text which is to be sent
                         if let Some(tcpc) = &mut self.tcpc{
-                            tcpc.send_message(self.label.clone(), self.username.clone()).expect("Couldnt send msg");
+                            match tcpc.send_message(self.label.clone(), self.username.clone()){
+                                Ok(ok) => {ok},
+                                Err(_) => {
+                                    //disable everything lol
+                                    self.ml_is_enabled = false;
+                                    self.tcpc = None;
+                                    self.connection_is_open = true;
+                                    self.status = "Server offline".to_owned();
+                                    self.status_color = egui::Color32::from_rgb(255, 0, 0)
+                                }
+                            };
                         }
                         self.label.clear();
                     };
