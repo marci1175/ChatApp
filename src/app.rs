@@ -152,7 +152,17 @@ impl eframe::App for TemplateApp {
                 });
         }
         if let Some(tcpc) = &mut self.tcpc{
-            let incoming_msg : String = TcpClient::listen_for_msg(tcpc);
+            let incoming_msg : String = match TcpClient::listen_for_msg(tcpc){
+                Ok(ok) => {ok},
+                Err(_) => {
+                    self.ml_is_enabled = false;
+                    self.tcpc = Option::None;
+                    self.connection_is_open = true;
+                    self.status = "Server offline".to_owned();
+                    self.status_color = egui::Color32::from_rgb(255, 0, 0);
+                    "Connection has been severed".to_owned()
+                }
+            };
             if incoming_msg.trim().len() > 0{
                 let raw_msg: Vec<String> = incoming_msg.split('\n').map(|s| s.to_string()).collect();
                 self.messages.push(raw_msg[0].clone());
@@ -353,17 +363,7 @@ impl eframe::App for TemplateApp {
                     if ui.button("Send message").clicked(){
                         //format the text which is to be sent
                         if let Some(tcpc) = &mut self.tcpc{
-                            match tcpc.send_message(self.label.clone(), self.username.clone()){
-                                Ok(ok) => {ok},
-                                Err(_) => {
-                                    //disable everything lol
-                                    self.ml_is_enabled = false;
-                                    self.tcpc = None;
-                                    self.connection_is_open = true;
-                                    self.status = "Server offline".to_owned();
-                                    self.status_color = egui::Color32::from_rgb(255, 0, 0)
-                                }
-                            };
+                           tcpc.send_message(self.label.clone(), self.username.clone()).expect("Failed to send message");
                         }
                         self.label.clear();
                     };

@@ -55,7 +55,7 @@ impl TcpClient {
         self.client.shutdown(std::net::Shutdown::Both)?;
         Ok(())
     }
-    pub fn listen_for_msg(&mut self) -> String {
+    pub fn listen_for_msg(&mut self) -> Result<String, io::Error> {
         let mut message_string: String = Default::default();
         let mut buff = vec![0; MSG_SIZE];
         match self.client.read_exact(&mut buff) {
@@ -70,14 +70,13 @@ impl TcpClient {
             },
             Err(ref err) if err.kind() == ErrorKind::WouldBlock => (),
             Err(_) => {
-                println!("connection with server was severed");
-                
+                println!("Connection has been se");
+                return Err(ErrorKind::ConnectionRefused.into())
             }
         }
         
-        return message_string;
+        return Ok(message_string);
     }
-
         // Return a clone of the current state of the struct
     }
 
