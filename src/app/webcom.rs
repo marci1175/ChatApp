@@ -70,7 +70,6 @@ impl TcpClient {
             },
             Err(ref err) if err.kind() == ErrorKind::WouldBlock => (),
             Err(_) => {
-                println!("Connection has been se");
                 return Err(ErrorKind::ConnectionRefused.into())
             }
         }

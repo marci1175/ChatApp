@@ -367,6 +367,9 @@ impl eframe::App for TemplateApp {
                         }
                         self.label.clear();
                     };
+                    if ui.button(egui::RichText::from(" + ").size(20.0)).clicked(){
+                        
+                    };
                     //emoji icon, button logic
                     let uibutt = ui.button(egui::RichText::from(&self.random_emoji).size(20.0));
                     if uibutt.hovered(){
@@ -389,6 +392,7 @@ impl eframe::App for TemplateApp {
                         }
                         
                     }
+                    
     
                 });
             });
