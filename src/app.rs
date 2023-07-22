@@ -272,7 +272,7 @@ impl eframe::App for TemplateApp {
                         
                     }
                     if ui.button("Disconnect").clicked(){
-                        //dsiconnect
+                        //disconnect
                         if let Some(tcpc) = &self.tcpc {
                             self.status = "Disconecting. . .".to_owned();
                             self.status_color = Color32::from_rgb(245, 66, 93);

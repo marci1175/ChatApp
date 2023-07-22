@@ -15,16 +15,15 @@ fn main() {
     server.set_nonblocking(true).expect("failed to initialize non-blocking");
 
     let mut clients = vec![];
-    
+    let mut client_count : i32 = 0;
     let (tx, rx) = mpsc::channel::<String>();
     loop {
         if let Ok((mut socket, addr)) = server.accept() {
             println!("Client {} connected", addr);
-
+            client_count += 1;
             let tx = tx.clone();
             clients.push(socket.try_clone().expect("failed to clone client"));
-            let client_amount = clients.len();
-            let msg = format!("{}, has connected\n{}", addr, client_amount);
+            let msg = format!("{}, has connected\n{}", addr, client_count);
             tx.send(msg.to_string()).expect("msg");
             thread::spawn(move || loop {
                 let mut buff = vec![0; MSG_SIZE];
@@ -34,14 +33,15 @@ fn main() {
                         let msg = buff.into_iter().take_while(|&x| x != 0).collect::<Vec<_>>();
                         let msg = String::from_utf8(msg).expect("Invalid utf8 message");
 
-                        println!("{}: {:?}\n{}", addr, msg, client_amount);
-                        let msg = format!("{} \n{}",msg, client_amount);
+                        println!("{}: {:?}\n", addr, msg);
+                        let msg = format!("{} \n{}",msg,client_count);
                         tx.send(msg).expect("failed to send msg to rx");
                     }, 
                     Err(ref err) if err.kind() == ErrorKind::WouldBlock => (),
                     Err(_) => {
                         println!("closing connection with: {}", addr);
-                        let msg = format!("{}, has disconnected\n{}", addr, client_amount - 1);
+                        client_count -= 1;
+                        let msg = format!("{}, has disconnected\n{}", addr, client_count);
                         tx.send(msg.to_string()).expect("msg");
                         break;
                         
