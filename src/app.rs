@@ -19,11 +19,15 @@ use win32_notification::NotificationBuilder;
 pub struct TemplateApp {
     //generate random
     #[serde(skip)]
+    general_settings: bool,
+    #[serde(skip)]
+    txt_settings: bool,
+    #[serde(skip)]
+    msg_settings: bool,
+    #[serde(skip)]
     msg_len_already_backed: bool,
     #[serde(skip)]
     has_focus: bool,
-    #[serde(skip)]
-    back_up_messages_num: usize,
     #[serde(skip)]
     ml_is_enabled: bool,
     #[serde(skip)]
@@ -31,47 +35,53 @@ pub struct TemplateApp {
     #[serde(skip)]
     random_generated: bool,
     #[serde(skip)]
-    randomeng: ThreadRng,
-    //used for interactive emoji button
-    random_emoji: String,
-    emoji: Vec<String>,
-    #[serde(skip)]
-    //inputted text
-    label: String,
-    #[serde(skip)]
-    tcpc: Option<TcpClient>,
-    // this how you opt-out of serialization of a member
-    #[serde(skip)]
-    //currently connected users
-    user_counter: String,
-    //settings
-    font_size : f32,
-    color: Color32,
-    #[serde(skip)]
-    status: String,
-    #[serde(skip)]
-    status_color: Color32,
-
-    msg_font_size : f32,
-    msg_color: Color32,
-    //settings menu
-    #[serde(skip)]
     settings_is_open : bool,
     #[serde(skip)]
     connection_is_open : bool,
+    //used for interactive emoji button
+    #[serde(skip)]
+    tcpc: Option<TcpClient>,
+    // this how you opt-out of serialization of a member
 
+    //settings
+    #[serde(skip)]
+    status_color: Color32,
+    color: Color32,
+    msg_color: Color32,
+
+    //currently connected users
+    random_emoji: String,
+    #[serde(skip)]
+    user_counter: String,
+    #[serde(skip)]
+    status: String,
+    #[serde(skip)]
+    label: String,
+    #[serde(skip)]
+    username: String,
+    ip: String,
+    emoji: Vec<String>,
     #[serde(skip)]
     messages: Vec<String>,
 
+    font_size : f32,
+    msg_font_size : f32,
+
     #[serde(skip)]
-    username: String,
+    back_up_messages_num: usize,
+
+    //settings menu
     #[serde(skip)]
-    ip: String,
+    randomeng: ThreadRng,
+
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
+            general_settings: false,
+            msg_settings: false,
+            txt_settings: false,
             has_focus: false,
             back_up_messages_num: 0,
             ml_is_enabled: false,
@@ -94,7 +104,7 @@ impl Default for TemplateApp {
             connection_is_open : true,
             messages: Vec::new(),
             username: String::new(),
-            ip: String::from("127.0.0.1:6000"),
+            ip: String::default(),
         }
     }
 }
@@ -114,7 +124,7 @@ impl TemplateApp {
     }
 }
 impl eframe::App for TemplateApp {
-    
+
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
@@ -137,13 +147,13 @@ impl eframe::App for TemplateApp {
         if  (self.back_up_messages_num + 4) < self.messages.len() && !self.has_focus{
             //reset thread_is_running value
             self.back_up_messages_num += 5;
-                std::thread::spawn(||{
+                thread::spawn(||{
                     let notification = NotificationBuilder::new()
                         .title_text("SzéChat")
                         .info_text("Unread messages")
                         .build()
                         .expect("Could not create notification");
-    
+
                         notification.show().expect("Failed to show notification");
                     thread::sleep(Duration::from_secs(5));
                     notification
@@ -156,10 +166,10 @@ impl eframe::App for TemplateApp {
                 Ok(ok) => {ok},
                 Err(_) => {
                     self.ml_is_enabled = false;
-                    self.tcpc = Option::None;
+                    self.tcpc = None;
                     self.connection_is_open = true;
                     self.status = "Server offline".to_owned();
-                    self.status_color = egui::Color32::from_rgb(255, 0, 0);
+                    self.status_color = Color32::from_rgb(255, 0, 0);
                     "Connection has been severed".to_owned()
                 }
             };
@@ -175,12 +185,12 @@ impl eframe::App for TemplateApp {
                 ctx.request_repaint();
             }
             //ctx.request_repaint();
-            
+
         }
         //scroll delta = zoom delta because im pressing ctrl it counts az zoom
         let scroll_delta: f32 = ctx.input(|state: &egui::InputState| state.zoom_delta());
-        
-        
+
+
         let ctrlimput = unsafe {
             GetAsyncKeyState(VK_CONTROL as i32)
         };
@@ -192,37 +202,72 @@ impl eframe::App for TemplateApp {
         let shiftinp = unsafe{
             GetAsyncKeyState(VK_SHIFT as i32)
         };
-        
+
         let sis_pressed = (shiftinp as u16 & 0x8000) != 0;
         let eis_pressed = (enterinp as u16 & 0x8000) != 0;
-        
+
         if eis_pressed && !sis_pressed {
             if let Some(tcpc) = &mut self.tcpc{
                 tcpc.send_message(self.label.clone(), self.username.clone()).expect("Couldnt send msg");
             }
             self.label.clear();
         }
-        
+
         if self.settings_is_open {
             egui::Window::new("Settings")
                 .open(&mut self.settings_is_open)
+                .fixed_size((220.0,220.0))
                 .resizable(false)
                 .show(ctx, |ui| {
-                    egui::Grid::new("settings_grid").num_columns(2).show(ui, |ui| {
-                        ui.label("Text editor");
-                        ui.group(|ui|{
-                        ui.label("Text size");
-                        ui.add(egui::Slider::new(&mut self.font_size, 1.0..=100.0));
-                        ui.label("Text color");
-                        egui::color_picker::color_picker_color32(ui, &mut self.color, Alpha::Opaque);});
-                        ui.end_row();
+                    egui::SidePanel::left("settings menu").show_inside(ui, |ui|{
+                        ui.with_layout(egui::Layout::top_down(Align::Center), |ui|{
+                            if ui.button("Messages").clicked(){
+                                self.msg_settings = !self.msg_settings;
+                                if self.msg_settings && self.txt_settings || self.general_settings {
+                                    self.general_settings = false;
+                                    self.txt_settings = false;
+                                }
+                            }
+                            if ui.button("Text editor").clicked(){
+                                self.txt_settings = !self.txt_settings;
+                                if self.txt_settings &&  self.msg_settings || self.general_settings {
+                                    self.general_settings = false;
+                                    self.msg_settings = false;
+                                }
+                            }
+                            if ui.button("General").clicked(){
+                                self.general_settings = !self.general_settings;
+                                if self.msg_settings || self.txt_settings && self.general_settings {
+                                    self.msg_settings = false;
+                                    self.txt_settings = false;
+                                }
+                            }
+                        });
+                    });
+                    if self.txt_settings {
+                            ui.label("Text editor");
+                            ui.separator();
+                            ui.label("Text size");
+                            ui.add(egui::Slider::new(&mut self.font_size, 1.0..=100.0));
+                            ui.separator();
+                            ui.label("Text color");
+                            egui::color_picker::color_picker_color32(ui, &mut self.color, Alpha::Opaque);
+                    }
+                    if self.msg_settings {
                         ui.label("Messages");
-                        ui.group(|ui|{
+                        ui.separator();
                         ui.label("Text size");
                         ui.add(egui::Slider::new(&mut self.msg_font_size, 1.0..=100.0));
+                        ui.separator();
                         ui.label("Text color");
-                        egui::color_picker::color_picker_color32(ui, &mut self.msg_color, Alpha::Opaque);});
-                    });
+                        egui::color_picker::color_picker_color32(ui, &mut self.msg_color, Alpha::Opaque);
+                    }
+                    if self.general_settings{
+                        ui.label("General");
+                        ui.separator();
+                        ui.label("Default ip address");
+                        ui.text_edit_singleline(&mut self.ip);
+                    }
                 });
         }
         if self.connection_is_open{
@@ -236,8 +281,8 @@ impl eframe::App for TemplateApp {
                     ui.text_edit_singleline(&mut self.username);
                     ui.label("Enter the ip you want to connect to :");
                     ui.text_edit_singleline(&mut self.ip);
-                    if ui.button("Connect").clicked(){ 
-                       
+                    if ui.button("Connect").clicked(){
+
                         if let Some(_) = &self.tcpc {
                             self.status = "Connection already established".to_owned();
                             ctx.request_repaint();
@@ -267,9 +312,9 @@ impl eframe::App for TemplateApp {
                                 },
 
                             };
-                            
+
                         }
-                        
+
                     }
                     if ui.button("Disconnect").clicked(){
                         //disconnect
@@ -292,29 +337,29 @@ impl eframe::App for TemplateApp {
                     ui.colored_label(self.status_color, &mut self.status)
                 });
         }
-        
+
 
         #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui|{
-               
+
                 if ui.button("Connect").clicked(){
                     self.connection_is_open = true;
                 }
-    
+
                 if ui.button("Settings").clicked(){
                     self.settings_is_open = true;
                 }
                 if !self.ml_is_enabled {
-                    ui.label(egui::RichText::from("Connect to a chat server to write messages!").color(egui::Color32::from_rgb(255, 0, 0)));
+                    ui.label(egui::RichText::from("Connect to a chat server to write messages!").color(Color32::from_rgb(255, 0, 0)));
                 }
                 else {
                     let connected_users = format!("Connected users: {}", self.user_counter);
                     ui.label(connected_users);
                 }
-                
-                });   
-            
+
+                });
+
 
 
         });
@@ -324,6 +369,7 @@ impl eframe::App for TemplateApp {
                 //add messages here
                     for i in self.messages.iter() {
                         let msglabel = ui.label(egui::RichText::new(i).color(self.msg_color).size(self.msg_font_size));
+                        msglabel.clicked();
                         if msglabel.hovered() && ctrlis_pressed{
                             if scroll_delta < 1.0 {
                                 self.msg_font_size -= 5.0;
@@ -343,15 +389,15 @@ impl eframe::App for TemplateApp {
             ui.add_space(5.0);
             ui.allocate_ui(egui::vec2(ui.available_width(), 125.0), |ui|{
                 egui::ScrollArea::vertical().id_source("text_sarea").stick_to_bottom(true).show(ui, |ui| {
-                ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
+                ui.with_layout(egui::Layout::top_down_justified(Align::Center), |ui| {
                     ui.add_sized(ui.available_size(), egui::TextEdit::multiline(&mut self.label)
                         .text_color(self.color)
                         .interactive(self.ml_is_enabled)
                         .font(egui::FontId::proportional(self.font_size)));
                     });
-                }); 
+                });
             ui.add_space(5.0);
-            });    
+            });
         });
         egui::TopBottomPanel::bottom("textmenu").show(ctx, |ui| {
             if self.emojiui_is_open{
@@ -368,7 +414,7 @@ impl eframe::App for TemplateApp {
                         self.label.clear();
                     };
                     if ui.button(egui::RichText::from(" + ").size(20.0)).clicked(){
-                        
+
                     };
                     //emoji icon, button logic
                     let uibutt = ui.button(egui::RichText::from(&self.random_emoji).size(20.0));
@@ -390,16 +436,16 @@ impl eframe::App for TemplateApp {
                         else {
                             self.emojiui_is_open = true;
                         }
-                        
+
                     }
-                    
-    
+
+
                 });
             });
         });
-        
-        
-        
+
+
+
         if false {
             egui::Window::new("Window").show(ctx, |ui| {
                 ui.label("Windows can be moved by dragging them.");
